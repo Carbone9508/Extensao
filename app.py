@@ -13,7 +13,7 @@ app = Flask(__name__)
 BASE_URL = "https://energi.eletrica.ufpr.br/static/arquivos/"
 
 # Pasta para salvar gráficos interativos
-GRAPH_FOLDER = os.path.join("static")
+GRAPH_FOLDER = os.path.join(os.getcwd(), "static")  # Caminho absoluto para a pasta
 os.makedirs(GRAPH_FOLDER, exist_ok=True)
 
 
@@ -107,4 +107,5 @@ def generate_graph():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Só ativa o modo de debug se estiver localmente
+    app.run(debug=os.getenv("FLASK_ENV") == "development", host="0.0.0.0", port=5000)

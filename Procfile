@@ -1,2 +1,1 @@
-web: gunicorn Gráficos:app
-
+web: gunicorn app:app
