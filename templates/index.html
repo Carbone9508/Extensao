@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Gráficos Interativos</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            background-color: #f4f4f9;
+        }
+        h1 {
+            text-align: center;
+            padding: 20px;
+            background-color: #007bff;
+            color: white;
+            margin: 0;
+            position: relative;
+        }
+        .ufpr-logo {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            height: 60px; /* Ajuste o tamanho da logo conforme necessário */
+        }
+        .container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: auto;
+        }
+        .button-container {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #folder-search {
+            margin-bottom: 15px;
+            padding: 10px;
+            width: 100%;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        #folder-nav {
+            margin-top: 20px;
+        }
+        .folder, .file-name {
+            padding: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            background-color: #ffffff;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        .folder:hover, .file-name:hover {
+            background-color: #e0f7fa;
+        }
+        .folder-name::before {
+            content: "📁";
+            margin-right: 8px;
+        }
+        .file-name.selected {
+            font-weight: bold;
+            background-color: #f0f0f0;
+        }
+        #loading {
+            display: none;
+            font-size: 16px;
+            color: #007bff;
+        }
+        #notification {
+            display: none;
+            color: green;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 20px;
+        }
+        #graph-container {
+            margin-top: 20px;
+        }
+        iframe {
+            width: 100%;
+            height: 600px;
+            border: none;
+        }
+
+        /* Estilos para mobile */
+        @media (max-width: 768px) {
+            .button-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+            #folder-search {
+                width: 90%;
+            }
+        }
+
+        /* Barra de Pesquisa */
+        #folder-search {
+            margin-bottom: 10px;
+            padding: 5px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Gerador de Gráficos Interativos UFPR Extensão
+        <img src="https://ufpr.br/wp-content/themes/wpufpr_bootstrap5_portal/images/ufpr.png" alt="Logo UFPR" class="ufpr-logo">
+    </h1>
+    <h2>Feito por Wesley Carbone Costa Ramos</h2>
+    <div class="container">
+        <div class="button-container">
+            <button onclick="generateGraph('2D')">Gerar Gráfico 2D</button>
+            <button onclick="generateGraph('3D')">Gerar Gráfico 3D</button>
+            <button onclick="printGraph()">Imprimir Gráfico</button>
+        </div>
+
+        <!-- Caixa de pesquisa para pastas -->
+        <input type="text" id="folder-search" placeholder="Buscar pasta..." oninput="searchFolders()">
+
+        <!-- Navegação de pastas -->
+        <div id="folder-nav">
+            <button onclick="goBack()">Voltar</button>
+            <div id="folders"></div>
+        </div>
+
+        <!-- Indicador de Carregamento -->
+        <div id="loading">Carregando...</div>
+
+        <!-- Notificação de Sucesso -->
+        <div id="notification">Gráfico gerado com sucesso!</div>
+
+        <div id="graph-container">
+            <iframe id="graph-frame"></iframe>
+        </div>
+    </div>
+
+    <script>
+        let currentPath = ""; // Caminho atual da navegação
+        let selectedFileUrl = ""; // URL do arquivo selecionado
+        let currentGraphType = '2D'; // Tipo de gráfico atual (inicialmente 2D)
+        let pathHistory = []; // Histórico de navegação (para voltar corretamente)
+
+        // Função para formatar o caminho correto de navegação
+        function formatPath(path) {
+            return path.trim().replace(/^\/+|\/+$/g, ''); // Remove barras no início e final
+        }
+
+        // Listar arquivos e pastas
+        async function listFiles(path = "") {
+            document.getElementById("loading").style.display = 'block'; // Mostrar indicador de carregamento
+            try {
+                const formattedPath = formatPath(path); // Formata o caminho
+                const response = await axios.get(`/list-files?path=${formattedPath}`);
+                currentPath = formattedPath;
+
+                // Adiciona o caminho atual ao histórico de navegação
+                if (formattedPath && formattedPath !== pathHistory[pathHistory.length - 1]) {
+                    pathHistory.push(formattedPath);
+                }
+
+                const foldersContainer = document.getElementById("folders");
+
+                // Limpa a área de navegação
+                foldersContainer.innerHTML = "";
+
+                // Exibe as subpastas
+                response.data.folders.forEach(folder => {
+                    const folderDiv = document.createElement("div");
+                    folderDiv.classList.add("folder");
+                    folderDiv.onclick = () => listFiles(currentPath + '/' + folder.name); // Concatenando com a pasta atual
+                    folderDiv.innerHTML = `<div class="folder-name">${folder.name}</div>`;
+                    foldersContainer.appendChild(folderDiv);
+                });
+
+                // Exibe os arquivos CSV dentro da pasta
+                response.data.files.forEach(file => {
+                    const fileDiv = document.createElement("div");
+                    fileDiv.classList.add("file-name");
+
+                    // Adiciona ícone de "papel" para arquivos CSV
+                    const icon = document.createElement("i");
+                    if (file.name.endsWith(".csv")) {
+                        icon.classList.add("fas", "fa-file-csv");  // Ícone específico para arquivos CSV
+                    } else {
+                        icon.classList.add("fas", "fa-file-alt");  // Ícone genérico para outros arquivos
+                    }
+                    fileDiv.appendChild(icon);
+
+                    // Nome do arquivo
+                    fileDiv.textContent = file.name;
+                    fileDiv.onclick = () => selectFile(file.name); // Marca o arquivo como selecionado
+                    fileDiv.dataset.url = currentPath + '/' + file.name; // Armazena a URL completa do arquivo
+                    foldersContainer.appendChild(fileDiv);
+                });
+            } catch (error) {
+                alert("Erro ao carregar arquivos: " + error);
+            } finally {
+                document.getElementById("loading").style.display = 'none'; // Esconde o indicador de carregamento
+            }
+        }
+
+        // Selecionar um arquivo
+        function selectFile(fileName) {
+            // Construa a URL completa do arquivo (considerando o caminho atual)
+            selectedFileUrl = `https://energi.eletrica.ufpr.br/static/arquivos/${currentPath}/${fileName}`;
+            
+            // Gera o gráfico 2D imediatamente ao clicar no arquivo
+            generateGraph(currentGraphType);
+        }
+
+        // Gerar gráfico
+        async function generateGraph(graphType) {
+            if (!selectedFileUrl) {
+                alert("Selecione um arquivo CSV.");
+                return;
+            }
+
+            currentGraphType = graphType; // Atualiza o tipo de gráfico atual
+
+            try {
+                const response = await axios.post("/generate-graph", {
+                    url: selectedFileUrl, // Passando a URL completa do arquivo CSV
+                    graphType: graphType
+                });
+
+                document.getElementById("graph-frame").src = response.data.graphUrl;
+
+                // Notificação de sucesso
+                document.getElementById("notification").style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById("notification").style.display = 'none';
+                }, 3000); // Esconde a notificação após 3 segundos
+            } catch (error) {
+                alert("Erro ao gerar gráfico: " + error);
+            }
+        }
+
+        // Função de pesquisa de pastas
+        function searchFolders() {
+            const query = document.getElementById("folder-search").value.toLowerCase();
+            const folderDivs = document.querySelectorAll(".folder, .file-name");
+            folderDivs.forEach(div => {
+                const text = div.textContent.toLowerCase();
+                div.style.display = text.includes(query) ? 'block' : 'none';
+            });
+        }
+
+        // Função para voltar
+        function goBack() {
+            pathHistory.pop(); // Remove o último caminho
+            const previousPath = pathHistory[pathHistory.length - 1] || ""; // Volta para o caminho anterior
+            listFiles(previousPath); // Lista novamente os arquivos no caminho anterior
+        }
+
+        // Carregar arquivos ao abrir a página
+        listFiles();
+    </script>
+</body>
+</html>
